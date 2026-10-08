@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RoadEye — Real-Time Road Safety & Dynamic Navigation</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#0ea5e9">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230ea5e9'><path d='M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 10h2v4h-2zm0 6h2v2h-2z'/></svg>">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen overflow-hidden antialiased select-none">
+
+  <!-- Top App Navigation Bar -->
+  <header class="h-16 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between z-30 shrink-0">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-sky-500/20">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
+            RoadEye <span class="text-xs bg-sky-500/20 text-sky-400 border border-sky-500/30 font-semibold px-1.5 py-0.5 rounded">MVP 2.0</span>
+          </h1>
+        </div>
+        <p class="text-xs text-slate-400 hidden sm:block">Dynamic Safe Navigation & Real-time Road Hazard Mesh</p>
+      </div>
+    </div>
+
+    <!-- Active Stats & Fast Actions -->
+    <div class="flex items-center space-x-2 sm:space-x-4">
+      <div class="hidden md:flex items-center space-x-4 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60 text-xs">
+        <div>
+          <span class="text-slate-400">Active Hazards:</span>
+          <span id="stat-active" class="font-bold text-sky-400 ml-1">0</span>
+        </div>
+        <div class="w-px h-4 bg-slate-700"></div>
+        <div>
+          <span class="text-slate-400">Critical Risks:</span>
+          <span id="stat-critical" class="font-bold text-rose-400 ml-1">0</span>
+        </div>
+      </div>
+
+      <!-- Offline indicator -->
+      <div id="offline-badge" class="hidden items-center space-x-1 bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs border border-amber-500/30">
+        <span>⚡ Offline Queue:</span>
+        <span id="offline-queue-count" class="font-bold">0</span>
+      </div>
+
+      <!-- Simulation Button -->
+      <button id="sim-btn" onclick="startDriveSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold px-3 py-2 rounded-lg transition flex items-center shadow-md shadow-indigo-600/30">
+        🚗 Start Simulation
+      </button>
+
+      <!-- Report Button -->
+      <button onclick="openReportModal()" class="bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 shadow-md shadow-rose-600/30">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <span>Report Hazard</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Map & Control Overlay Container -->
+  <main class="relative flex-1 w-full h-full">
+    <!-- Leaflet Map Container -->
+    <div id="map" class="w-full h-full z-0"></div>
+
+    <!-- Proactive Audio & Visual Proximity Alert Banner (< 300m) -->
+    <div id="hazard-alert-banner" class="hidden absolute top-4 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-xl animate-bounce">
+      <div class="glass-panel border-2 border-rose-500/80 bg-rose-950/90 text-white p-4 rounded-xl shadow-2xl flex items-center justify-between backdrop-blur">
+        <div class="flex items-center space-x-3">
+          <div class="w-12 h-12 rounded-full bg-rose-600/30 border border-rose-400 flex items-center justify-center shrink-0">
+            <span class="text-2xl animate-pulse">⚠️</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs uppercase tracking-wider font-extrabold text-rose-300">Hazard Proximity Alert</span>
+              <span class="text-[10px] bg-rose-500 text-white font-bold px-1.5 py-0.2 rounded">WITHIN 300M</span>
+            </div>
+            <h3 id="alert-hazard-title" class="text-base font-bold text-white">Critical Pothole Ahead</h3>
+            <p id="alert-hazard-dist" class="text-xs text-rose-200">240m away • Confidence: 88%</p>
+          </div>
+        </div>
+        <button onclick="calculateRoutes()" class="bg-white text-rose-900 hover:bg-rose-100 font-bold text-xs px-3.5 py-2 rounded-lg shadow transition shrink-0 ml-2">
+          Switch to Safe Route ⚡
+        </button>
+      </div>
+    </div>
+
+    <!-- Floating Navigation Bar on Top Left -->
+    <div class="absolute top-4 left-4 z-10 w-80 max-w-[calc(100vw-2rem)]">
+      <div class="glass-panel p-3.5 rounded-xl text-slate-100 shadow-xl border border-slate-700/80">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Safe Route Planner
+          </span>
+          <span class="text-[10px] text-slate-400">OSRM + Safety Cost</span>
+        </div>
+
+        <div class="space-y-2 mb-3">
+          <!-- Quick Preset Buttons -->
+          <div class="flex gap-1.5 mb-2">
+            <button type="button" onclick="setQuickRoute('virar', 'dadar')" class="flex-1 py-1 px-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded text-[11px] font-semibold text-center transition">
+              🚆 Virar ➔ Dadar
+            </button>
+            <button type="button" onclick="setQuickRoute('delhi-cp', 'india-gate')" class="py-1 px-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-medium transition">
+              Delhi Tour
+            </button>
+          </div>
+
+          <!-- Start Location Input -->
+          <div class="relative">
+            <label class="text-[11px] text-slate-400 block mb-0.5 flex justify-between">
+              <span>📍 Starting Point</span>
+              <button type="button" onclick="useCurrentGpsAsStart()" class="text-sky-400 hover:underline text-[10px]">Use GPS</button>
+            </label>
+            <div class="flex gap-1">
+              <input id="start-search-input" type="text" placeholder="e.g. Virar Railway Station" value="Virar, Maharashtra" class="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-sky-500 focus:outline-none"/>
+              <button type="button" onclick="searchLocation('start')" class="px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold">🔍</button>
+            </div>
+            <!-- Start Search Suggestions -->
+            <div id="start-suggestions" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50 max-h-40 overflow-y-auto"></div>
+          </div>
+
+          <!-- Destination Location Input -->
+          <div class="relative">
+            <label class="text-[11px] text-slate-400 block mb-0.5">🏁 Destination</label>
+            <div class="flex gap-1">
+              <input id="dest-search-input" type="text" placeholder="e.g. Dadar TT Circle" value="Dadar, Mumbai" class="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-sky-500 focus:outline-none"/>
+              <button type="button" onclick="searchLocation('dest')" class="px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold">🔍</button>
+            </div>
+            <!-- Destination Search Suggestions -->
+            <div id="dest-suggestions" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50 max-h-40 overflow-y-auto"></div>
+          </div>
+        </div>
+
+        <button id="calc-route-btn" onclick="calculateRoutes()" class="w-full py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-lg shadow-md transition flex items-center justify-center gap-1.5">
+          <span>🛡️</span> Search & Calculate Safest Route
+        </button>
+      </div>
+
+      <!-- Route Comparison Card (Generated After Calc) -->
+      <div id="route-comparison-card" class="hidden mt-2.5 glass-panel p-3.5 rounded-xl text-slate-100 shadow-xl border border-slate-700/80 space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <span class="text-xs font-bold text-sky-400 uppercase tracking-wide">Route Comparison</span>
+          <span id="hazards-avoided-count" class="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold"></span>
+        </div>
+
+        <!-- Direct Route (Standard OSRM) -->
+        <div class="p-2 rounded-lg bg-rose-950/30 border border-rose-900/50">
+          <div class="flex items-center justify-between text-xs font-semibold text-rose-300">
+            <span>Standard Shortest (Fastest)</span>
+            <span id="direct-time" class="font-mono text-white"></span>
+          </div>
+          <div id="direct-hazards" class="text-[11px] text-rose-400 mt-0.5"></div>
+        </div>
+
+        <!-- RoadEye Safe Detour Route -->
+        <div class="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/50">
+          <div class="flex items-center justify-between text-xs font-bold text-emerald-300">
+            <span>RoadEye Safe Recommendation</span>
+            <span id="safe-time" class="font-mono text-emerald-200"></span>
+          </div>
+          <div id="safe-hazards" class="text-[11px] text-emerald-400 mt-0.5"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Legend at Bottom Left -->
+    <div class="hidden sm:block absolute bottom-6 left-4 z-10 glass-panel p-2.5 rounded-lg text-[11px] text-slate-300 space-y-1.5 shadow-lg border border-slate-800">
+      <div class="font-semibold text-slate-200 pb-1 border-b border-slate-800">Hazard Severity Legend</div>
+      <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-rose-600 inline-block shadow"></span> Critical (Pothole / Blocked)</div>
+      <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-orange-500 inline-block shadow"></span> Moderate (Waterlogging)</div>
+      <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-yellow-400 inline-block shadow"></span> Low (Road Damage)</div>
+      <div class="flex items-center gap-2 pt-1 border-t border-slate-800 text-[10px] text-slate-400">
+        <span>🟢 Safe Route</span> • <span class="text-rose-400">🔴 Hazardous Direct</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- Floating Map Selection Banner (Active when choosing location on map) -->
+  <div id="pin-placement-banner" class="hidden absolute top-4 left-1/2 -translate-x-1/2 z-30 w-11/12 max-w-lg">
+    <div class="glass-panel border-2 border-amber-500 bg-slate-900/95 text-white p-3.5 rounded-xl shadow-2xl flex items-center justify-between">
+      <div class="flex items-center space-x-2.5">
+        <span class="text-2xl animate-bounce">📍</span>
+        <div>
+          <h4 class="text-xs font-bold text-amber-400 uppercase tracking-wider">Select Location on Map</h4>
+          <p class="text-[11px] text-slate-300">Pan or zoom the map and click exactly where the hazard is located!</p>
+        </div>
+      </div>
+      <button onclick="cancelPinSelection()" class="bg-slate-800 hover:bg-slate-700 text-xs px-2.5 py-1.5 rounded-lg text-slate-300">
+        Cancel ✕
+      </button>
+    </div>
+  </div>
+
+  <!-- Redesigned User-Friendly Hazard Reporting Modal -->
+  <div id="report-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-5 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center space-x-2">
+          <div class="w-9 h-9 rounded-xl bg-rose-600/20 text-rose-400 flex items-center justify-center font-bold text-lg">⚠️</div>
+          <div>
+            <h2 class="text-base font-bold text-white">Report Road Hazard</h2>
+            <p class="text-[11px] text-slate-400">Fill details and tap on map to pin location</p>
+          </div>
+        </div>
+        <button onclick="closeReportModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+
+      <form onsubmit="handleProceedToPickLocation(event)" class="mt-4 space-y-3.5">
+        <!-- Hidden Lat / Lon (User never needs to manually type or see coordinates) -->
+        <input id="report-lat" name="latitude" type="hidden" value=""/>
+        <input id="report-lon" name="longitude" type="hidden" value=""/>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-300 block mb-1">Hazard Category</label>
+          <select id="report-category" name="category" required class="w-full bg-slate-800 border border-slate-700 text-xs text-slate-200 rounded-lg p-2.5 focus:ring-1 focus:ring-sky-500">
+            <option value="Pothole">🕳️ Severe Pothole (Crater)</option>
+            <option value="Waterlogging">🌊 Waterlogging / Flooded Street</option>
+            <option value="Accident">💥 Accident / Road Obstructed</option>
+            <option value="Road Damage">🚧 Broken Asphalt / Damaged Road</option>
+            <option value="Road Closure">⛔ Road Closed / Barricaded</option>
+            <option value="Construction">🏗️ Construction Zone</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-300 block mb-1">Severity Level</label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="border border-slate-700 bg-slate-800/80 p-2.5 rounded-lg text-center cursor-pointer hover:border-yellow-400 transition">
+              <input type="radio" name="severity" value="Low" class="hidden peer"/>
+              <span class="text-xs font-bold peer-checked:text-yellow-400 block">Low</span>
+              <span class="text-[10px] text-slate-400">Passable</span>
+            </label>
+            <label class="border border-slate-700 bg-slate-800/80 p-2.5 rounded-lg text-center cursor-pointer hover:border-orange-400 transition">
+              <input type="radio" name="severity" value="Moderate" checked class="hidden peer"/>
+              <span class="text-xs font-bold peer-checked:text-orange-400 block">Moderate</span>
+              <span class="text-[10px] text-slate-400">Slow down</span>
+            </label>
+            <label class="border border-slate-700 bg-slate-800/80 p-2.5 rounded-lg text-center cursor-pointer hover:border-rose-500 transition">
+              <input type="radio" name="severity" value="Critical" class="hidden peer"/>
+              <span class="text-xs font-bold peer-checked:text-rose-500 block">Critical</span>
+              <span class="text-[10px] text-slate-400">Dangerous</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-300 block mb-1">Description / Landmark (Optional)</label>
+          <input id="report-desc" name="description" type="text" placeholder="e.g. Deep pothole on right lane near bridge..." class="w-full bg-slate-800 border border-slate-700 text-xs text-slate-200 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500"/>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-300 block mb-1">Photo Evidence (Optional)</label>
+          <input id="report-photo" name="photo" type="file" accept="image/*" class="w-full text-xs text-slate-400 file:mr-2 file:py-1.5 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:bg-slate-800 file:text-white file:border file:border-slate-700 hover:file:bg-slate-700"/>
+        </div>
+
+        <div class="pt-2 flex gap-2">
+          <button type="button" onclick="closeReportModal()" class="w-1/3 py-2.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg text-slate-300 transition">
+            Cancel
+          </button>
+          <button id="report-step1-btn" type="submit" class="w-2/3 py-2.5 bg-rose-600 hover:bg-rose-500 text-xs font-bold rounded-lg text-white shadow-lg shadow-rose-600/30 flex items-center justify-center gap-1.5 transition">
+            <span>📍 Place Pin on Map (Done)</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Real-time Toast Notifications -->
+  <div id="toast" class="hidden"></div>
+
+  <!-- App Main Javascript -->
+  <script src="/static/app.js"></script>
+</body>
+</html>

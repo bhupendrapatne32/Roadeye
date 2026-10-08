@@ -1,0 +1,21 @@
+{
+  "name": "RoadEye - Real-Time Road Safety & Navigation",
+  "short_name": "RoadEye",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0ea5e9",
+  "description": "Real-time crowdsourced road safety and dynamic hazard-avoiding navigation.",
+  "icons": [
+    {
+      "src": "/static/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
